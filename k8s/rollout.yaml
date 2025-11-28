@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: canary-demo
+  labels:
+    app: canary-demo
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: canary-demo
+  strategy:
+    canary:
+      steps:
+        - setWeight: 10
+        - pause:
+            duration: 20
+        - setWeight: 50
+        - pause:
+            duration: 20
+        - setWeight: 100
+      trafficRouting:
+        nginx: {}      # use nginx ingress or service mesh if configured (left blank for simple service switching)
+  template:
+    metadata:
+      labels:
+        app: canary-demo
+    spec:
+      containers:
+        - name: canary-demo
+          image: latchudevops/argocd-canary-demo:latest
+          env:
+            - name: APP_VERSION
+              value: "v0.0.0"   # CI will replace this with the actual sha/tag
+          ports:
+            - containerPort: 8080
