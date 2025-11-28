@@ -1,0 +1,47 @@
+name: CI/CD - Canary Deploy (Docker Hub)
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set vars
+        run: |
+          IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/argocd-canary-demo:${{ github.sha }}
+          echo "IMAGE=${IMAGE}" >> $GITHUB_ENV
+          echo "APP_VERSION=${{ github.sha }}" >> $GITHUB_ENV
+
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+      - name: Build image
+        run: docker build -t $IMAGE .
+
+      - name: Push image
+        run: docker push $IMAGE
+
+      - name: Update rollout manifest image & version
+        run: |
+          sed -i "s|image: .*|image: $IMAGE|" k8s/rollout.yaml
+          sed -i "s|value: \".*\"|value: \"${APP_VERSION}\"|" k8s/rollout.yaml
+          
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+          git add k8s/rollout.yaml
+          git commit -m "ci: update image → $IMAGE" || echo "No changes"
+          git push || echo "Push failed or no changes"
+
